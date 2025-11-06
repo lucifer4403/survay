@@ -1,10 +1,9 @@
-// index.js (최종 수정 버전 - 환경 변수 사용 및 이메일 포트 수정)
+// index.js (최종 통합 수정 버전)
 
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const cors = require('cors');
-
+const cors = require('cors'); // CORS 미들웨어 사용
 const nodemailer = require('nodemailer'); 
 const xlsx = require('xlsx'); 
 
@@ -15,30 +14,37 @@ const app = express();
 const PORT = 5000;
 
 // --- 1. 기본 설정 (Middleware) ---
-app.use(cors());
+// 🚨 CORS 문제 해결: Netlify 주소만 허용하도록 변경 
+const corsOptions = {
+    // ⚠️ Netlify 임시 도메인으로 변경해야 합니다.
+    origin: 'https://resilient-mandazi-b3d16e.netlify.app', 
+    credentials: true,
+};
+app.use(cors(corsOptions)); // ◀ 옵션을 적용하여 CORS 미들웨어 사용
+
 app.use(bodyParser.json());
 
-// --- 2. MongoDB 데이터베이스 연결 (환경 변수 사용) ---
-// DB 주소를 코드에 하드코딩하지 않고, Render 환경 변수에서 가져옵니다.
+// --- 2. MongoDB 데이터베이스 연결 ---
 const dbURI = process.env.MONGODB_URI; 
 
 mongoose.connect(dbURI)
     .then(() => console.log('✅ MongoDB 연결 성공'))
     .catch((err) => console.error('❌ MongoDB 연결 실패:', err));
 
-// --- 3. Nodemailer (이메일 발송기) 설정 (환경 변수 사용 및 포트 명시) ---
-// ⚠️ Connection timeout 오류 해결을 위해 호스트, 포트, secure 옵션을 명시합니다.
+// --- 3. Nodemailer (Naver SMTP 설정) ---
+// ⚠️ 이메일 오류 해결: Naver SMTP로 전환하고 포트 명시
 const transporter = nodemailer.createTransport({
-    host: 'smtp.naver.com', // ◀= 네이버 SMTP 서버로 변경
-    port: 465,              // ◀= 포트 465 유지
+    host: 'smtp.naver.com', // ◀ Naver 서버 주소
+    port: 465,              
     secure: true,           
     auth: {
-        user: process.env.GMAIL_USER, // 이제 Naver ID가 들어감
-        pass: process.env.GMAIL_PASS  // 이제 Naver 앱 비밀번호가 들어감
+        user: process.env.GMAIL_USER, // Render 환경 변수에서 Naver ID를 가져옴
+        pass: process.env.GMAIL_PASS  // Render 환경 변수에서 Naver PW/앱 비밀번호를 가져옴
     }
 });
 
-// --- 4. API 라우트(Routes) 정의 (이하 코드는 변경 없음) ---
+
+// --- 4. API 라우트(Routes) 정의 (나머지 코드는 변경 없음) ---
 
 /* (테스트용) */
 app.get('/api/test', (req, res) => {
@@ -177,8 +183,8 @@ app.get('/api/surveys/:id/export', async (req, res) => {
 
         // 이메일 전송
         await transporter.sendMail({
-            from: process.env.GMAIL_USER, // Render 환경 변수에서 가져옴
-            to: process.env.RECEIVE_EMAIL, // ◀= 환경 변수에서 받을 이메일 주소를 가져옴
+            from: process.env.GMAIL_USER, 
+            to: process.env.RECEIVE_EMAIL, 
             subject: `[${survey.title}] 설문조사 결과 보고서`, 
             text: `총 ${responses.length}개의 응답 결과를 엑셀 파일로 첨부합니다.`,
             attachments: [
