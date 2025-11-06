@@ -29,15 +29,14 @@ mongoose.connect(dbURI)
 // --- 3. Nodemailer (이메일 발송기) 설정 (환경 변수 사용 및 포트 명시) ---
 // ⚠️ Connection timeout 오류 해결을 위해 호스트, 포트, secure 옵션을 명시합니다.
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', 
-    port: 465,              
+    host: 'smtp.naver.com', // ◀= 네이버 SMTP 서버로 변경
+    port: 465,              // ◀= 포트 465 유지
     secure: true,           
     auth: {
-        user: process.env.GMAIL_USER, // Render 환경 변수에서 G메일 주소를 가져옴
-        pass: process.env.GMAIL_PASS  // Render 환경 변수에서 16자리 앱 비밀번호를 가져옴
+        user: process.env.GMAIL_USER, // 이제 Naver ID가 들어감
+        pass: process.env.GMAIL_PASS  // 이제 Naver 앱 비밀번호가 들어감
     }
 });
-
 
 // --- 4. API 라우트(Routes) 정의 (이하 코드는 변경 없음) ---
 
