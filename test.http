@@ -1,0 +1,49 @@
+### 1. (POST) 새 설문지 생성하기
+POST http://localhost:5000/api/surveys
+Content-Type: application/json
+
+{
+    "title": "VS Code 테스트 설문",
+    "description": "REST Client로 만든 설문입니다.",
+    "questions": [
+        {
+            "text": "당신의 직업은 무엇인가요?",
+            "type": "text"
+        },
+        {
+            "text": "선호하는 커피는?",
+            "type": "choice",
+            "options": ["아메리카노", "라떼"]
+        }
+    ]
+}
+
+### 2. (GET) 모든 설문지 목록 조회하기
+GET http://localhost:5000/api/surveys
+
+### 3. (GET) 특정 설문지 1개 조회하기 (사용자용)
+# 참고: 아래의 "690c6b..." 부분은
+# 이전에 GET 목록(### 2)에서 확인한 실제 설문지의 "_id" 값으로 바꿔야 합니다.
+GET http://localhost:5000/api/surveys/690c6b249155914f94b8adec
+
+### 4. (POST) 설문 응답 제출하기 (사용자용)
+# "surveyId"는 위 3번에서 사용한 "_id" 값과 동일해야 합니다.
+POST http://localhost:5000/api/responses
+Content-Type: application/json
+
+{
+    "surveyId": "690c6b249155914f94b8adec",
+    "answers": [
+        {
+            "questionText": "당신의 직업은 무엇인가요?",
+            "value": "개발자"
+        },
+        {
+            "questionText": "선호하는 커피는?",
+            "value": "라떼"
+        }
+    ]
+}
+### 5. (GET) 엑셀/이메일 전송 요청 (최종 테스트)
+# 이전에 테스트한 3, 4번의 surveyId 값과 동일해야 합니다.
+GET http://localhost:5000/api/surveys/690c6b249155914f94b8adec/export
