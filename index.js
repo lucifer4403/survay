@@ -32,7 +32,7 @@ const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
         user: 'ds20250829@gmail.com', // ◀= 본인 G메일 주소
-        pass: 'qvtg glxu eoft lshw'              // ◀= 본인 G메일 앱 비밀번호
+        pass: 'qvtgglxueoftlshw'              // ◀= 본인 G메일 앱 비밀번호
     }
 });
 
