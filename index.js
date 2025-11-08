@@ -1,9 +1,10 @@
-// index.js (최종 통합 수정 버전)
+// index.js (최종 안정화 코드 - CORS 완전 해제 및 Naver 설정 명확화)
 
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const cors = require('cors'); // CORS 미들웨어 사용
+// CORS 미들웨어를 사용하지만, 모든 접근을 허용하여 CORS 오류를 무력화합니다.
+const cors = require('cors'); 
 const nodemailer = require('nodemailer'); 
 const xlsx = require('xlsx'); 
 
@@ -14,13 +15,8 @@ const app = express();
 const PORT = 5000;
 
 // --- 1. 기본 설정 (Middleware) ---
-// 🚨 CORS 문제 해결: Netlify 주소만 허용하도록 변경 
-const corsOptions = {
-    // ⚠️ Netlify 임시 도메인으로 변경해야 합니다.
-    origin: 'https://resilient-mandazi-b3d16e.netlify.app', 
-    credentials: true,
-};
-app.use(cors(corsOptions)); // ◀ 옵션을 적용하여 CORS 미들웨어 사용
+// 🚨 CORS 문제 해결: 모든 도메인의 접근을 허용 (*)하여 CORS 오류를 무력화합니다.
+app.use(cors()); 
 
 app.use(bodyParser.json());
 
@@ -32,20 +28,18 @@ mongoose.connect(dbURI)
     .catch((err) => console.error('❌ MongoDB 연결 실패:', err));
 
 // --- 3. Nodemailer (Naver SMTP 설정) ---
-// ⚠️ 이메일 오류 해결: Naver SMTP로 전환하고 포트 명시
 const transporter = nodemailer.createTransport({
-    host: 'smtp.naver.com', // ◀ Naver 서버 주소
-    port: 465,              
-    secure: true,           
+    host: 'smtp.naver.com', // Naver SMTP 서버
+    port: 465,              // 보안 포트 명시
+    secure: true,           // SSL/TLS 사용 명시
     auth: {
-        user: process.env.GMAIL_USER, // Render 환경 변수에서 Naver ID를 가져옴
-        pass: process.env.GMAIL_PASS  // Render 환경 변수에서 Naver PW/앱 비밀번호를 가져옴
+        user: process.env.GMAIL_USER, 
+        pass: process.env.GMAIL_PASS  
     }
 });
 
 
 // --- 4. API 라우트(Routes) 정의 (나머지 코드는 변경 없음) ---
-
 /* (테스트용) */
 app.get('/api/test', (req, res) => {
     res.json({ message: '👋 survey-app 백엔드 서버가 동작 중입니다!' });
