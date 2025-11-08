@@ -1,4 +1,4 @@
-// index.js (최종 완성 및 안정화 버전)
+// index.js (최종 안정화 버전: CORS/404/로그인/텔레그램 문제 해결)
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -9,7 +9,6 @@ const axios = require('axios');
 const FormData = require('form-data'); 
 const jwt = require('jsonwebtoken'); 
 
-// Mongoose 모델 불러오기
 const Survey = require('./models/Survey');
 const Response = require('./models/Response');
 
@@ -20,10 +19,12 @@ const PORT = 5000;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'your_super_secret_key_for_jwt';
 
 // ====================================================================
-// 1. 미들웨어 설정 (라우트 위에 위치)
+// 1. 미들웨어 설정 (실행 순서 최적화)
 // ====================================================================
 
+// 🚨 핵심 수정: CORS 미들웨어를 가장 먼저 호출하여 모든 도메인의 접근을 허용합니다.
 app.use(cors()); 
+
 app.use(bodyParser.json());
 
 
@@ -35,7 +36,6 @@ mongoose.connect(dbURI)
 
 
 // --- 3. 인증 미들웨어 및 텔레그램 함수 ---
-
 const isAuthenticated = (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) {
@@ -133,20 +133,13 @@ app.delete('/api/surveys/:id', isAuthenticated, async (req, res) => { /* 설문�
     } catch (error) { res.status(500).json({ message: '설문지 삭제에 실패했습니다.' }); }
 });
 
-
-// 💡 텔레그램 엑셀 전송 API (500 오류 최종 수정 로직)
-app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => { 
+app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => { /* 텔레그램 엑셀 전송 */
     try {
-        const surveyId = req.params.id;
-        const survey = await Survey.findById(surveyId);
-        if (!survey) { return res.status(404).json({ message: '설문지를 찾을 수 없습니다.' }); }
-
-        const responses = await Response.find({ surveyId: surveyId }).sort({ submittedAt: 1 });
-        if (responses.length === 0) { 
-            return res.status(400).json({ message: '이 설문지에는 응답이 없어 엑셀을 생성할 수 없습니다.' }); 
-        }
+        const survey = await Survey.findById(req.params.id);
+        const responses = await Response.find({ surveyId: req.params.id }).sort({ submittedAt: 1 });
+        if (responses.length === 0) { return res.status(400).json({ message: '이 설문지에는 응답이 없어 엑셀을 생성할 수 없습니다.' }); }
         
-        // 엑셀 생성 로직 (Workbook 구성)
+        // 엑셀 생성 로직
         const headers = ['제출 시간', '이름', '전화번호', ...survey.questions.map(q => q.text)];
         const data = [headers]; 
         
@@ -156,7 +149,6 @@ app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => {
                 r.name,
                 r.phone
             ];
-            // 응답 순서에 맞춰 값을 채웁니다.
             const answerMap = new Map(r.answers.map(a => [a.questionText, a.value]));
             survey.questions.forEach(q => {
                 row.push(answerMap.get(q.text) || '');
@@ -166,12 +158,12 @@ app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => {
 
         const ws = xlsx.utils.aoa_to_sheet(data); 
         const wb = xlsx.utils.book_new();
-        const filename = `${survey.title}_응답보고서.xlsx`; // 파일명 명확하게 수정
+        const filename = `${survey.title}_응답보고서.xlsx`;
         xlsx.utils.book_append_sheet(wb, ws, '설문응답');
         const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
 
-        // 🚨 텔레그램 파일 전송 로직 최종 안정화
+        // 텔레그램 파일 전송 로직
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
         const captionText = `🔔 설문 응답 보고서: [${survey.title}]\n총 ${responses.length}개의 응답이 접수되었습니다.`;
@@ -180,7 +172,7 @@ app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => {
         formData.append('chat_id', chatId);
         formData.append('caption', captionText);
         
-        // 핵심 수정: 버퍼를 파일로 직접 첨부 (Render 환경 호환성 확보)
+        // 버퍼를 파일로 직접 첨부 (안정화)
         formData.append('document', excelBuffer, { 
             filename: filename, 
             contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
@@ -196,11 +188,7 @@ app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => {
 
     } catch (error) {
         console.error('🔥 엑셀/텔레그램 전송 오류:', error.response ? error.response.data : error.message);
-        res.status(500).json({ 
-            message: '서버 오류가 발생했습니다. (엑셀 전송 로직 충돌)', 
-            // 텔레그램 오류 메시지를 디버깅용으로 포함
-            details: error.response ? error.response.data : error.message 
-        });
+        res.status(500).json({ message: '서버 오류가 발생했습니다. (텔레그램 전송 로직 충돌)' });
     }
 });
 
@@ -220,27 +208,36 @@ app.get('/api/surveys/:id', async (req, res) => { /* 특정 설문지 1개 조�
 app.post('/api/responses', async (req, res) => { /* 설문 응답 제출 */
     try {
         const { surveyId, name, phone, answers } = req.body;
+        
+        // 💡 텔레그램 알림을 위한 survey 정보 로드
+        const survey = await Survey.findById(surveyId);
+        if (!survey) { return res.status(404).json({ message: '존재하지 않는 설문지 ID입니다.' }); }
+        
         const existingResponse = await Response.findOne({ surveyId, phone });
         if (existingResponse) { return res.status(409).json({ message: '이미 이 설문에 참여한 전화번호입니다.' }); }
 
         const newResponse = new Response({ surveyId, name, phone, answers });
         await newResponse.save();
         
-        // 💡 텔레그램 알림 전송 (비동기 처리로 서버 충돌 방지)
+        // 텔레그램 알림 전송 (비동기 처리)
         sendTelegramAlert(`🔔 새 응답 도착! 설문: ${survey.title}\n응답자: ${name} (${phone})`).catch(console.error); 
         
         res.status(201).json({ message: '소중한 의견 감사합니다. 응답이 성공적으로 제출되었습니다.' });
 
     } catch (error) {
+        console.error('응답 제출 오류:', error);
+        if (error.code === 11000) {
+             return res.status(409).json({ message: '이미 이 설문에 참여한 전화번호입니다.' });
+        }
         res.status(500).json({ message: '응답 제출에 실패했습니다.' });
     }
 });
 
 
 // ====================================================================
-// 5. 정적 파일 제공 (404 오류 최종 해결)
+// 5. 정적 파일 제공 (호환성 확보를 위해 라우트 뒤에 위치)
 // ====================================================================
-// 🚨 핵심 수정: 모든 API 라우트를 처리한 후, 나머지 요청(HTML, CSS, JS)만 처리합니다.
+// 🚨 404 오류 해결: 모든 API 라우트를 처리한 후, 나머지 요청(HTML, CSS, JS)만 이 코드가 처리합니다.
 app.use(express.static('.')); 
 
 
