@@ -1,12 +1,11 @@
-// index.js (최종 수정 버전: Gmail SMTP & Telegram 알림 포함)
+// index.js (최종 수정 버전: 이메일 제거, 텔레그램 파일 직접 전송)
 
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const cors = require('cors'); 
-const nodemailer = require('nodemailer'); 
 const xlsx = require('xlsx'); 
-const axios = require('axios'); // 💡 Telegram 연동을 위한 axios 추가
+const axios = require('axios'); // 💡 Telegram 연동을 위한 axios 유지
 
 const Survey = require('./models/Survey');
 const Response = require('./models/Response');
@@ -19,23 +18,14 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // --- 2. MongoDB 데이터베이스 연결 ---
+// MONGODB_URI는 .env 파일에서 불러옵니다.
 const dbURI = process.env.MONGODB_URI; 
 
 mongoose.connect(dbURI)
     .then(() => console.log('✅ MongoDB 연결 성공'))
     .catch((err) => console.error('❌ MongoDB 연결 실패:', err));
 
-// --- 3. Nodemailer (Gmail SMTP 설정으로 변경) ---
-// ⚠️ 주의: GMAIL_PASS는 '앱 비밀번호'를 사용해야 합니다.
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // 💡 Gmail SMTP 서버
-    port: 465,              
-    secure: true,           
-    auth: {
-        user: process.env.GMAIL_USER, // 📧 보내는 Gmail 계정 (예: myemail@gmail.com)
-        pass: process.env.GMAIL_PASS  // 🔑 Gmail 앱 비밀번호
-    }
-});
+// --- 3. Nodemailer 설정은 완전히 제거되었습니다. ---
 
 
 // --- 4. API 라우트(Routes) 정의 ---
@@ -145,7 +135,7 @@ app.post('/api/responses', async (req, res) => {
 });
 
 
-/* 엑셀/이메일 전송 API (최종 수정) */
+/* 엑셀/텔레그램 전송 API (최종 수정: 텔레그램 파일 직접 전송) */
 app.get('/api/surveys/:id/export', async (req, res) => {
     try {
         const surveyId = req.params.id;
@@ -155,7 +145,7 @@ app.get('/api/surveys/:id/export', async (req, res) => {
         const responses = await Response.find({ surveyId: surveyId }).sort({ submittedAt: 1 });
         if (responses.length === 0) { return res.status(400).json({ message: '이 설문지에는 아직 응답이 없습니다.' }); }
 
-        // 엑셀 생성 로직...
+        // 엑셀 생성 로직 (이전과 동일)...
         const headers = ['제출 시간', '이름', '전화번호', ...survey.questions.map(q => q.text)];
         const data = [headers]; 
         for (const response of responses) {
@@ -172,47 +162,44 @@ app.get('/api/surveys/:id/export', async (req, res) => {
         }
         const ws = xlsx.utils.aoa_to_sheet(data); 
         const wb = xlsx.utils.book_new();
+        const filename = `${survey.title}_${Date.now()}.xlsx`;
         xlsx.utils.book_append_sheet(wb, ws, '설문응답');
         const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-        // 이메일 전송 (Gmail 사용)
-        await transporter.sendMail({
-            from: process.env.GMAIL_USER, 
-            to: process.env.RECEIVE_EMAIL, // 💡 받는 이메일도 환경 변수 사용
-            subject: `[${survey.title}] 설문조사 결과 보고서`, 
-            text: `총 ${responses.length}개의 응답 결과를 엑셀 파일로 첨부합니다.`,
-            attachments: [
-                {
-                    filename: `${survey.title}_${Date.now()}.xlsx`,
-                    content: excelBuffer, 
-                    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                }
-            ]
-        });
 
-        console.log('✅ 이메일 전송 성공!');
-
-        // 💡 Telegram 알림 전송 (선택 사항)
+        // 💡 텔레그램으로 엑셀 파일 직접 전송
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
-        const messageText = `🔔 설문 응답 알림: [${survey.title}]\n총 ${responses.length}개의 응답이 접수되어 이메일로 엑셀 보고서가 전송되었습니다.`;
+        const captionText = `🔔 설문 응답 보고서: [${survey.title}]\n총 ${responses.length}개의 응답이 접수되었습니다.`;
 
-        if (telegramToken && chatId) {
-            await axios.post(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-                chat_id: chatId,
-                text: messageText,
-            });
-            console.log('✅ 텔레그램 알림 전송 성공!');
-            res.status(200).json({ message: '엑셀 보고서가 이메일로 성공적으로 전송되었으며, 텔레그램 알림이 발송되었습니다.' });
-        } else {
-            console.log('⚠️ 텔레그램 환경 변수가 설정되지 않아 알림을 건너뛰었습니다.');
-             res.status(200).json({ message: '엑셀 보고서가 이메일로 성공적으로 전송되었습니다.' });
+        if (!telegramToken || !chatId) {
+             return res.status(500).json({ 
+                message: '텔레그램 환경 변수(TELEGRAM_BOT_TOKEN 또는 TELEGRAM_CHAT_ID)를 .env 파일에 반드시 설정해야 합니다.' 
+             });
         }
         
+        // Form Data를 사용하여 엑셀 파일 전송 준비
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('document', new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+        formData.append('caption', captionText);
+        
+        // 텔레그램 sendDocument API 호출
+        await axios.post(`https://api.telegram.org/bot${telegramToken}/sendDocument`, formData, {
+            headers: {
+                ...formData.getHeaders() // Form Data 헤더 설정
+            }
+        });
+
+        console.log('✅ 텔레그램으로 엑셀 파일 전송 성공!');
+        res.status(200).json({ message: '엑셀 보고서가 텔레그램으로 성공적으로 전송되었습니다.' });
 
     } catch (error) {
-        console.error('🔥 엑셀/이메일 전송 오류:', error);
-        res.status(500).json({ message: '서버 오류가 발생했습니다. Nodemailer 설정(앱 비밀번호)을 확인하세요.', error });
+        console.error('🔥 엑셀/텔레그램 전송 오류:', error.response ? error.response.data : error.message);
+        res.status(500).json({ 
+            message: '서버 오류가 발생했습니다. 텔레그램 토큰, 채팅 ID, 또는 봇의 권한을 확인하세요.', 
+            error: error.response ? error.response.data : error.message 
+        });
     }
 });
 
