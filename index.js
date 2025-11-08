@@ -1,4 +1,4 @@
-// index.js (최종 안정화 버전: 모든 기능 통합 및 순서 최적화)
+// index.js (최종 완성 및 안정화 버전)
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -9,6 +9,7 @@ const axios = require('axios');
 const FormData = require('form-data'); 
 const jwt = require('jsonwebtoken'); 
 
+// Mongoose 모델 불러오기
 const Survey = require('./models/Survey');
 const Response = require('./models/Response');
 
@@ -19,22 +20,22 @@ const PORT = 5000;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'your_super_secret_key_for_jwt';
 
 // ====================================================================
-// 1. 필수 미들웨어 (라우트 위쪽에 위치)
+// 1. 미들웨어 설정 (라우트 위에 위치)
 // ====================================================================
 
-// CORS 문제 해결: 모든 도메인 접근 허용 (*), JSON 데이터 파싱
 app.use(cors()); 
 app.use(bodyParser.json());
 
 
-// 2. MongoDB 데이터베이스 연결 (서버 실행 전에 연결 시도)
+// 2. MongoDB 데이터베이스 연결
 const dbURI = process.env.MONGODB_URI; 
 mongoose.connect(dbURI)
     .then(() => console.log('✅ MongoDB 연결 성공'))
     .catch((err) => console.error('❌ MongoDB 연결 실패:', err));
 
 
-// --- 3. 인증 미들웨어 ---
+// --- 3. 인증 미들웨어 및 텔레그램 함수 ---
+
 const isAuthenticated = (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) {
@@ -42,15 +43,14 @@ const isAuthenticated = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, ADMIN_SECRET);
-        req.user = decoded; 
+        jwt.verify(token, ADMIN_SECRET);
         next(); 
     } catch (err) {
         return res.status(401).json({ message: '접근 권한이 유효하지 않습니다. 다시 로그인해 주세요.' });
     }
 };
 
-// 💡 텔레그램 알림 함수 (충돌 방지 로직 포함)
+// 💡 텔레그램 알림 함수 (서버 충돌 방지 로직 포함)
 async function sendTelegramAlert(message) {
     const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -72,7 +72,7 @@ async function sendTelegramAlert(message) {
 
 
 // ====================================================================
-// 4. API 라우트 정의 (모든 기능)
+// 4. API 라우트 정의
 // ====================================================================
 
 // 💡 1. 관리자 로그인
@@ -106,7 +106,7 @@ app.get('/api/latest-survey', async (req, res) => {
 
 
 // ----------------------------------------------------------------------
-// 🚨 관리자 API: 모두 isAuthenticated 적용 (404 오류 해결을 위해)
+// 🚨 관리자 API: 모두 isAuthenticated 적용
 // ----------------------------------------------------------------------
 
 app.post('/api/surveys', isAuthenticated, async (req, res) => { /* 설문지 생성 */
@@ -133,27 +133,74 @@ app.delete('/api/surveys/:id', isAuthenticated, async (req, res) => { /* 설문�
     } catch (error) { res.status(500).json({ message: '설문지 삭제에 실패했습니다.' }); }
 });
 
-app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => { /* 텔레그램 엑셀 전송 */
+
+// 💡 텔레그램 엑셀 전송 API (500 오류 최종 수정 로직)
+app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => { 
     try {
-        const survey = await Survey.findById(req.params.id);
-        const responses = await Response.find({ surveyId: req.params.id }).sort({ submittedAt: 1 });
-        if (!responses.length) { return res.status(400).json({ message: '이 설문지에는 응답이 없어 엑셀을 생성할 수 없습니다.' }); }
+        const surveyId = req.params.id;
+        const survey = await Survey.findById(surveyId);
+        if (!survey) { return res.status(404).json({ message: '설문지를 찾을 수 없습니다.' }); }
+
+        const responses = await Response.find({ surveyId: surveyId }).sort({ submittedAt: 1 });
+        if (responses.length === 0) { 
+            return res.status(400).json({ message: '이 설문지에는 응답이 없어 엑셀을 생성할 수 없습니다.' }); 
+        }
         
-        // 엑셀 생성 로직 및 텔레그램 전송 (이전과 동일)
-        const excelBuffer = xlsx.write(xlsx.utils.book_new(), { type: 'buffer', bookType: 'xlsx' });
+        // 엑셀 생성 로직 (Workbook 구성)
+        const headers = ['제출 시간', '이름', '전화번호', ...survey.questions.map(q => q.text)];
+        const data = [headers]; 
+        
+        responses.forEach(r => {
+            const row = [
+                new Date(r.submittedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+                r.name,
+                r.phone
+            ];
+            // 응답 순서에 맞춰 값을 채웁니다.
+            const answerMap = new Map(r.answers.map(a => [a.questionText, a.value]));
+            survey.questions.forEach(q => {
+                row.push(answerMap.get(q.text) || '');
+            });
+            data.push(row);
+        });
+
+        const ws = xlsx.utils.aoa_to_sheet(data); 
+        const wb = xlsx.utils.book_new();
+        const filename = `${survey.title}_응답보고서.xlsx`; // 파일명 명확하게 수정
+        xlsx.utils.book_append_sheet(wb, ws, '설문응답');
+        const excelBuffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+
+        // 🚨 텔레그램 파일 전송 로직 최종 안정화
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
+        const captionText = `🔔 설문 응답 보고서: [${survey.title}]\n총 ${responses.length}개의 응답이 접수되었습니다.`;
         
         const formData = new FormData();
-        // ... (formData append 코드) ...
+        formData.append('chat_id', chatId);
+        formData.append('caption', captionText);
         
-        await axios.post(`https://api.telegram.org/bot${telegramToken}/sendDocument`, formData, { headers: formData.getHeaders() });
+        // 핵심 수정: 버퍼를 파일로 직접 첨부 (Render 환경 호환성 확보)
+        formData.append('document', excelBuffer, { 
+            filename: filename, 
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
         
+        await axios.post(`https://api.telegram.org/bot${telegramToken}/sendDocument`, formData, {
+            headers: formData.getHeaders(),
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+        });
+
         res.status(200).json({ message: '엑셀 보고서가 텔레그램으로 성공적으로 전송되었습니다.' });
 
     } catch (error) {
         console.error('🔥 엑셀/텔레그램 전송 오류:', error.response ? error.response.data : error.message);
-        res.status(500).json({ message: '서버 오류가 발생했습니다. 텔레그램 설정을 확인하세요.' });
+        res.status(500).json({ 
+            message: '서버 오류가 발생했습니다. (엑셀 전송 로직 충돌)', 
+            // 텔레그램 오류 메시지를 디버깅용으로 포함
+            details: error.response ? error.response.data : error.message 
+        });
     }
 });
 
@@ -179,8 +226,8 @@ app.post('/api/responses', async (req, res) => { /* 설문 응답 제출 */
         const newResponse = new Response({ surveyId, name, phone, answers });
         await newResponse.save();
         
-        // 💡 텔레그램 알림 전송 (비동기 처리)
-        sendTelegramAlert(`🔔 새 설문 응답 도착! 응답자: ${name} (${phone})`).catch(console.error); 
+        // 💡 텔레그램 알림 전송 (비동기 처리로 서버 충돌 방지)
+        sendTelegramAlert(`🔔 새 응답 도착! 설문: ${survey.title}\n응답자: ${name} (${phone})`).catch(console.error); 
         
         res.status(201).json({ message: '소중한 의견 감사합니다. 응답이 성공적으로 제출되었습니다.' });
 
@@ -189,10 +236,11 @@ app.post('/api/responses', async (req, res) => { /* 설문 응답 제출 */
     }
 });
 
+
 // ====================================================================
-// 5. 정적 파일 제공 (호환성 확보를 위해 라우트 뒤에 위치)
+// 5. 정적 파일 제공 (404 오류 최종 해결)
 // ====================================================================
-// 🚨 404 오류 해결: API 라우트를 모두 처리한 후, 나머지 요청(HTML, CSS, JS)만 이 코드가 처리합니다.
+// 🚨 핵심 수정: 모든 API 라우트를 처리한 후, 나머지 요청(HTML, CSS, JS)만 처리합니다.
 app.use(express.static('.')); 
 
 

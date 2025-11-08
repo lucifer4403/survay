@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설문조사 관리자 페이지</title>
     <style>
-        /* CSS는 이전과 동일 */
+        /* CSS는 이전과 동일하게 유지됩니다 */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
@@ -114,8 +114,6 @@
             border-top: 1px solid #eee;
             padding-top: 10px;
         }
-
-        /* 로그인 관련 CSS */
         #admin-content {
             display: none; 
             width: 100%; 
@@ -209,6 +207,7 @@
     </div>
 
     <script>
+        // 🚨 API 주소 확인: Render 서버 주소로 정확히 지정해주세요.
         const API_URL = 'https://survay.onrender.com/api'; 
         const LOGIN_API_URL = `${API_URL}/login`;
 
@@ -370,9 +369,19 @@
         }
 
         // -------------------------------------
-        // 💡 3. API 통신 함수
+        // 💡 3. API 통신 함수 (모두 인증 헤더 사용)
         // -------------------------------------
 
+        async function handleAuthError(error) {
+             if (error.message.includes('로그인') || error.message.includes('401')) {
+                 alert('인증이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.');
+                 localStorage.removeItem('adminToken');
+                 checkAuthentication();
+                 return true; // 에러 처리했음
+             }
+             return false; // 에러 처리 안 함
+        }
+        
         async function createSurvey() {
             const title = document.getElementById('survey-title').value.trim();
             const description = document.getElementById('survey-description').value.trim();
@@ -392,7 +401,7 @@
                 const result = await response.json();
 
                 if (!response.ok) { 
-                    throw new Error(result.message || '설문지 제작 실패'); 
+                    throw new Error(result.message || response.statusText); 
                 }
 
                 document.getElementById('survey-title').value = '';
@@ -403,13 +412,9 @@
                 loadSurveys(); 
 
             } catch (error) {
-                if (error.message.includes('로그인')) {
-                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
-                     localStorage.removeItem('adminToken');
-                     checkAuthentication();
-                     return;
+                if (!await handleAuthError(error)) {
+                    showMessage('create-message', `오류: ${error.message}`, 'error');
                 }
-                showMessage('create-message', `오류: ${error.message}`, 'error');
             }
         }
 
@@ -422,7 +427,7 @@
                 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.message || '설문 목록을 가져오는 데 실패했습니다.'); 
+                    throw new Error(errorData.message || response.statusText); 
                 }
 
                 const surveys = await response.json();
@@ -451,13 +456,9 @@
                 });
 
             } catch (error) {
-                if (error.message.includes('로그인')) {
-                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
-                     localStorage.removeItem('adminToken');
-                     checkAuthentication();
-                     return;
+                if (!await handleAuthError(error)) {
+                    showMessage('list-message', `오류: ${error.message}`, 'error');
                 }
-                showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
 
@@ -473,19 +474,15 @@
                 });
                 const result = await response.json();
                 
-                if (!response.ok) { throw new Error(result.message || '삭제 실패'); }
+                if (!response.ok) { throw new Error(result.message || response.statusText); }
 
                 showMessage('list-message', result.message, 'success');
                 loadSurveys(); 
 
             } catch (error) {
-                if (error.message.includes('로그인')) {
-                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
-                     localStorage.removeItem('adminToken');
-                     checkAuthentication();
-                     return;
+                 if (!await handleAuthError(error)) {
+                    showMessage('list-message', `오류: ${error.message}`, 'error');
                 }
-                showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
 
@@ -494,23 +491,24 @@
                 return;
             }
             try {
+                // 🚨 텔레그램 전송 시도
                 const response = await fetch(`${API_URL}/surveys/${surveyId}/export`, {
                     method: 'GET',
                     headers: getAuthHeaders() 
                 });
                 
                 const result = await response.json();
-                if (!response.ok) throw new Error(result.message || '전송 실패');
+                if (!response.ok) {
+                     // 500 에러 시 서버에서 보낸 디테일한 에러 메시지를 표시합니다.
+                     throw new Error(result.details || result.message || response.statusText);
+                }
+                
                 showMessage('list-message', result.message, 'success');
 
             } catch (error) {
-                if (error.message.includes('로그인')) {
-                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
-                     localStorage.removeItem('adminToken');
-                     checkAuthentication();
-                     return;
+                if (!await handleAuthError(error)) {
+                    showMessage('list-message', `오류: ${error.message}`, 'error');
                 }
-                showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
         
