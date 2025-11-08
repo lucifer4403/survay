@@ -1,11 +1,13 @@
-// index.js (최종 수정 버전: 이메일 제거, 텔레그램 파일 직접 전송)
+// index.js (최종 수정 버전: 이메일 제거, 텔레그램 파일 직접 전송 & 정적 파일 제공 추가)
 
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const cors = require('cors'); 
 const xlsx = require('xlsx'); 
-const axios = require('axios'); // 💡 Telegram 연동을 위한 axios 유지
+const axios = require('axios');
+// FormData를 사용하여 텔레그램에 파일을 전송하기 위해 'form-data' 라이브러리가 필요합니다.
+const FormData = require('form-data'); 
 
 const Survey = require('./models/Survey');
 const Response = require('./models/Response');
@@ -14,11 +16,16 @@ const app = express();
 const PORT = 5000;
 
 // --- 1. 기본 설정 (Middleware) ---
+// 🚨 CORS 문제 해결: 모든 도메인의 접근을 허용 (*)하여 CORS 오류를 무력화합니다.
 app.use(cors()); 
+
 app.use(bodyParser.json());
 
+// 💡 (추가) 정적 파일(index.html, admin.html) 제공 설정: 
+// 이 코드가 없으면 Render에서 HTML 파일을 찾지 못해 "Cannot GET /index.html" 오류 발생
+app.use(express.static('.')); 
+
 // --- 2. MongoDB 데이터베이스 연결 ---
-// MONGODB_URI는 .env 파일에서 불러옵니다.
 const dbURI = process.env.MONGODB_URI; 
 
 mongoose.connect(dbURI)
@@ -135,7 +142,7 @@ app.post('/api/responses', async (req, res) => {
 });
 
 
-/* 엑셀/텔레그램 전송 API (최종 수정: 텔레그램 파일 직접 전송) */
+/* 엑셀/텔레그램 전송 API (파일 직접 전송) */
 app.get('/api/surveys/:id/export', async (req, res) => {
     try {
         const surveyId = req.params.id;
@@ -145,7 +152,7 @@ app.get('/api/surveys/:id/export', async (req, res) => {
         const responses = await Response.find({ surveyId: surveyId }).sort({ submittedAt: 1 });
         if (responses.length === 0) { return res.status(400).json({ message: '이 설문지에는 아직 응답이 없습니다.' }); }
 
-        // 엑셀 생성 로직 (이전과 동일)...
+        // 엑셀 생성 로직...
         const headers = ['제출 시간', '이름', '전화번호', ...survey.questions.map(q => q.text)];
         const data = [headers]; 
         for (const response of responses) {
@@ -181,14 +188,16 @@ app.get('/api/surveys/:id/export', async (req, res) => {
         // Form Data를 사용하여 엑셀 파일 전송 준비
         const formData = new FormData();
         formData.append('chat_id', chatId);
-        formData.append('document', new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+        // buffer를 stream으로 변환하여 form-data에 append (텔레그램 파일 전송 규격)
+        formData.append('document', excelBuffer, { 
+            filename: filename, 
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
         formData.append('caption', captionText);
         
         // 텔레그램 sendDocument API 호출
         await axios.post(`https://api.telegram.org/bot${telegramToken}/sendDocument`, formData, {
-            headers: {
-                ...formData.getHeaders() // Form Data 헤더 설정
-            }
+            headers: formData.getHeaders() // Form Data 헤더 설정
         });
 
         console.log('✅ 텔레그램으로 엑셀 파일 전송 성공!');
