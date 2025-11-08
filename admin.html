@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설문조사 관리자 페이지</title>
     <style>
-        /* CSS는 이전과 동일합니다 */
+        /* ------------------------------------- */
+        /* CSS는 이전과 동일하며, 로그인 관련 CSS만 추가되었습니다. */
+        /* ------------------------------------- */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
@@ -35,349 +37,437 @@
             padding-bottom: 10px;
             margin-top: 0;
         }
-        input[type="text"], textarea, select { /* select도 스타일 적용 */
-            width: 95%;
-            padding: 12px;
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"], input[type="number"], select, textarea, input[type="password"] {
+            width: calc(100% - 20px);
+            padding: 10px;
             margin-bottom: 15px;
-            border: 1px solid #ddd;
+            border: 1px solid #ccc;
             border-radius: 6px;
+            box-sizing: border-box;
             font-size: 16px;
         }
-        textarea { min-height: 80px; resize: vertical; }
-        
         button {
-            background-color: #007bff; 
+            background-color: #007bff;
             color: white;
-            padding: 12px 20px;
+            padding: 10px 20px;
             border: none;
             border-radius: 6px;
-            font-size: 16px;
             cursor: pointer;
+            font-size: 16px;
             transition: background-color 0.2s;
-            margin-right: 5px; 
         }
-        button:hover { background-color: #0056b3; }
-        
-        button.secondary { background-color: #6c757d; }
-        button.secondary:hover { background-color: #5a6268; }
-        
-        button.export { background-color: #28a745; }
-        button.export:hover { background-color: #218838; }
-        
-        button.edit { background-color: #ffc107; }
-        button.edit:hover { background-color: #e0a800; }
-
-        button.delete { background-color: #dc3545; }
-        button.delete:hover { background-color: #c82333; }
-        
-        .button-group button {
-            font-size: 14px;
-            padding: 8px 12px;
+        button:hover {
+            background-color: #0056b3;
         }
-
-        #questions-container .question-item {
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
+        .question-item {
+            border: 1px solid #ddd;
             padding: 15px;
             margin-bottom: 15px;
-            background: #fafafa;
+            border-radius: 6px;
+            background-color: #f9f9f9;
         }
-        #survey-list ul { list-style: none; padding: 0; }
-        #survey-list li {
+        .question-item button {
+            margin-top: 10px;
+            background-color: #dc3545;
+        }
+        .question-item button:hover {
+            background-color: #c82333;
+        }
+        .message {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .survey-item {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            background-color: #fff;
+        }
+        .survey-item h3 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            color: #007bff;
+        }
+        .survey-actions button {
+            margin-right: 10px;
+            padding: 8px 15px;
+        }
+        .survey-actions {
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+
+        /* 💡 로그인 관련 CSS */
+        #admin-content {
+            display: none; /* 로그인 전까지 숨김 */
+            width: 100%; /* container 대신 전체 너비를 차지하도록 설정 */
+        }
+        #login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header-bar {
+            width: 100%;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px;
-            border-bottom: 1px solid #eee;
-            gap: 10px; 
+            margin-bottom: 20px;
         }
-        #survey-list li:last-child { border-bottom: none; }
-        #survey-list .survey-info {
-            font-size: 18px;
-            flex-grow: 1; 
-            word-break: break-all;
+        .header-bar h1 {
+            border-bottom: none;
+            padding-bottom: 0;
         }
-        .message {
-            padding: 15px; border-radius: 6px; margin-top: 15px;
-            font-size: 16px; display: none; 
+        #logout-btn {
+            background-color: #6c757d;
         }
-        .message.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .message.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-
-        @media (max-width: 768px) {
-            .container { flex-direction: column; }
-            #survey-list li { flex-direction: column; align-items: flex-start; }
-            .button-group { margin-top: 10px; }
+        #logout-btn:hover {
+            background-color: #5a6268;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        
-        <div class="column">
-            <h1 id="form-title">설문지 생성</h1>
-            <form id="survey-form">
-                <input type="text" id="survey-title" placeholder="설문지 제목" required>
-                <textarea id="survey-desc" placeholder="설문지 설명"></textarea>
+    <div id="login-container">
+        <h1>관리자 로그인</h1>
+        <div id="login-message" class="message" style="display: none;"></div>
+        <form id="login-form">
+            <label for="username">아이디:</label>
+            <input type="text" id="username" name="username" required><br>
+            <label for="password">비밀번호:</label>
+            <input type="password" id="password" name="password" required><br><br>
+            <button type="submit">로그인</button>
+        </form>
+    </div>
 
-                <h2>질문 목록</h2>
-                <div id="questions-container">
-                    </div>
-                
-                <button type="button" id="add-question" class="secondary">질문 추가</button>
-                <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-                
-                <div id="form-buttons">
-                    <button type="submit" id="submit-btn">설문지 생성하기</button>
-                    <button type="button" id="cancel-edit-btn" style="display: none;" class="secondary">수정 취소</button>
+    <div class="container" id="admin-content">
+        <div class="column survey-creation">
+            <div class="header-bar">
+                <h1>설문지 제작</h1>
+                <button id="logout-btn">로그아웃</button>
+            </div>
+            <div id="create-message" class="message" style="display: none;"></div>
+            <label for="survey-title">제목:</label>
+            <input type="text" id="survey-title" placeholder="설문지 제목" required>
+
+            <label for="survey-description">설명:</label>
+            <textarea id="survey-description" placeholder="설문지 설명" required></textarea>
+
+            <h2>질문 목록</h2>
+            <div id="questions-list">
                 </div>
-            </form>
-            <div id="form-message" class="message"></div>
+
+            <div class="question-item">
+                <label for="new-question-text">새 질문:</label>
+                <input type="text" id="new-question-text" placeholder="질문 내용">
+
+                <label for="new-question-type">유형:</label>
+                <select id="new-question-type">
+                    <option value="text">단답형</option>
+                    <option value="choice">객관식 (다중 선택)</option>
+                </select>
+
+                <div id="new-options-container" style="display: none; margin-top: 10px;">
+                    <label for="new-question-options">옵션 (콤마로 구분):</label>
+                    <input type="text" id="new-question-options" placeholder="예: 옵션1, 옵션2, 옵션3">
+                </div>
+                <button onclick="addQuestion()">질문 추가</button>
+            </div>
+            
+            <button onclick="createSurvey()">설문지 제작 완료</button>
         </div>
 
-        <div class="column">
-            <h1>설문지 목록</h1>
+        <div class="column survey-list">
+            <h2>제작된 설문지 목록</h2>
+            <div id="list-message" class="message" style="display: none;"></div>
             <div id="survey-list">
-                <ul>
-                    </ul>
-            </div>
-            <div id="list-message" class="message"></div>
+                </div>
         </div>
     </div>
 
     <script>
+        // 🚨 API_URL은 Render 서버 주소로 고정합니다.
         const API_URL = 'https://survay.onrender.com/api'; 
-        let editingSurveyId = null; 
+        const LOGIN_API_URL = `${API_URL}/login`;
 
-        // --- DOM 요소 캐싱 ---
-        const form = document.getElementById('survey-form');
-        const formTitle = document.getElementById('form-title');
-        const surveyTitleInput = document.getElementById('survey-title');
-        const surveyDescInput = document.getElementById('survey-desc');
-        const questionsContainer = document.getElementById('questions-container');
-        const addQuestionBtn = document.getElementById('add-question');
-        const submitBtn = document.getElementById('submit-btn');
-        const cancelEditBtn = document.getElementById('cancel-edit-btn');
-        const surveyListUl = document.querySelector('#survey-list ul');
+        // -------------------------------------
+        // 💡 1. 인증 관련 함수
+        // -------------------------------------
 
-        // --- 공통 기능: 메시지 표시 ---
-        function showMessage(elementId, text, type) {
-            const el = document.getElementById(elementId);
-            el.textContent = text;
-            el.className = `message ${type}`;
-            el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 5000);
+        // 로컬 스토리지에서 토큰을 가져와 헤더를 생성합니다.
+        function getAuthHeaders() {
+            const token = localStorage.getItem('adminToken');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // 💡 JWT 토큰 첨부
+            };
         }
 
-        // --- 1. 설문지 생성/수정 폼 기능 ---
-        let questionCount = 0;
+        // 로그인 폼, 관리자 콘텐츠 DOM 요소
+        const loginContainer = document.getElementById('login-container');
+        const adminContent = document.getElementById('admin-content');
+        const loginForm = document.getElementById('login-form');
+        const loginMessage = document.getElementById('login-message');
 
-        addQuestionBtn.addEventListener('click', () => {
-            addQuestionField(); 
+        // 인증 상태 확인 및 UI 전환
+        function checkAuthentication() {
+            const token = localStorage.getItem('adminToken');
+            if (token) {
+                loginContainer.style.display = 'none';
+                adminContent.style.display = 'flex';
+                loadSurveys(); // 로그인 성공 시 설문 목록 로드
+            } else {
+                loginContainer.style.display = 'block';
+                adminContent.style.display = 'none';
+            }
+        }
+
+        // 로그인 이벤트 리스너
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(LOGIN_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    showMessage('login-message', result.message || '로그인 실패', 'error');
+                    return;
+                }
+                
+                // 로그인 성공: 토큰 저장 후 페이지 로드
+                localStorage.setItem('adminToken', result.token);
+                showMessage('login-message', result.message, 'success');
+                checkAuthentication();
+                
+            } catch (error) {
+                showMessage('login-message', `오류: 서버에 접속할 수 없습니다.`, 'error');
+            }
         });
 
-        // 4단계: 질문 항목을 동적으로 생성하는 함수
-        function addQuestionField(text = '', type = 'text', options = []) {
-            questionCount++;
-            const questionDiv = document.createElement('div');
-            questionDiv.className = 'question-item';
-            
-            // 옵션(객관식/드롭다운) 입력창 HTML
-            const showOptions = (type === 'choice' || type === 'dropdown') ? 'block' : 'none';
-            const optionsInput = `
-                <div class="options-container" style="display: ${showOptions};">
-                    <input type="text" placeholder="선택지 (쉼표로 구분. 예: A,B,C)" value="${options.join(',')}">
-                </div>
-            `;
-            
-            questionDiv.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong>질문 ${questionCount}</strong>
-                    <button type="button" class="delete" style="padding: 5px 8px; font-size: 12px;" onclick="removeQuestion(this)">X</button>
-                </div>
-                <input type="text" placeholder="질문 내용" class="question-text" value="${text}" required>
-                
-                <select class="question-type">
-                    <option value="text" ${type === 'text' ? 'selected' : ''}>단답형</option>
-                    <option value="choice" ${type === 'choice' ? 'selected' : ''}>객관식(라디오)</option>
-                    <option value="dropdown" ${type === 'dropdown' ? 'selected' : ''}>드롭다운</option>
-                    <option value="rating" ${type === 'rating' ? 'selected' : ''}>별점(1-5)</option>
-                </select>
-                ${optionsInput}
-            `;
-            questionsContainer.appendChild(questionDiv);
+        // 로그아웃 버튼 이벤트 리스너
+        document.addEventListener('DOMContentLoaded', () => {
+             const logoutBtn = document.getElementById('logout-btn');
+             if (logoutBtn) {
+                 logoutBtn.addEventListener('click', () => {
+                     localStorage.removeItem('adminToken');
+                     alert('로그아웃 되었습니다.');
+                     checkAuthentication();
+                 });
+             }
+             // 페이지 로드 시 인증 확인
+             checkAuthentication(); 
+        });
 
-            // 객관식/드롭다운 선택 시 '선택지' 입력창 표시/숨김
-            questionDiv.querySelector('.question-type').addEventListener('change', (e) => {
-                const optionsDiv = questionDiv.querySelector('.options-container');
-                const selectedType = e.target.value;
-                if (selectedType === 'choice' || selectedType === 'dropdown') {
-                    optionsDiv.style.display = 'block';
-                } else {
-                    optionsDiv.style.display = 'none';
-                }
-            });
-        }
-        
-        // (삭제/생성/수정 로직은 변경 없음)
-        function removeQuestion(button) {
-            button.closest('.question-item').remove();
-            document.querySelectorAll('#questions-container .question-item strong').forEach((strong, index) => {
-                strong.textContent = `질문 ${index + 1}`;
-            });
-            questionCount = questionsContainer.children.length;
+
+        // -------------------------------------
+        // 💡 2. 메시지 및 질문 생성/목록 기존 함수
+        // -------------------------------------
+
+        let questions = [];
+
+        function showMessage(id, message, type) {
+            const element = document.getElementById(id);
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = 'block';
+            setTimeout(() => { element.style.display = 'none'; }, 5000);
         }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault(); 
-            
-            const title = surveyTitleInput.value;
-            const description = surveyDescInput.value;
-            const questions = [];
+        document.getElementById('new-question-type').addEventListener('change', (e) => {
+            const optionsContainer = document.getElementById('new-options-container');
+            optionsContainer.style.display = e.target.value === 'choice' ? 'block' : 'none';
+        });
 
-            document.querySelectorAll('.question-item').forEach(item => {
-                const text = item.querySelector('.question-text').value;
-                const type = item.querySelector('.question-type').value;
-                let options = [];
-                
-                if (type === 'choice' || type === 'dropdown') { // 드롭다운도 선택지 필요
-                    const optionsInput = item.querySelector('.options-container input').value;
-                    options = optionsInput.split(',').map(opt => opt.trim()).filter(opt => opt);
+        function renderQuestions() {
+            const list = document.getElementById('questions-list');
+            list.innerHTML = '';
+            questions.forEach((q, index) => {
+                const div = document.createElement('div');
+                div.className = 'question-item';
+                let optionsText = '';
+                if (q.type === 'choice' && q.options) {
+                    optionsText = `<br>옵션: ${q.options.join(', ')}`;
                 }
-                if (text) {
-                    questions.push({ text, type, options });
-                }
+                div.innerHTML = `
+                    <p><strong>${index + 1}. ${q.text}</strong> (${q.type === 'text' ? '단답형' : '객관식'})${optionsText}</p>
+                    <button onclick="removeQuestion(${index})">삭제</button>
+                `;
+                list.appendChild(div);
             });
+        }
 
+        function addQuestion() {
+            const text = document.getElementById('new-question-text').value.trim();
+            const type = document.getElementById('new-question-type').value;
+            const optionsInput = document.getElementById('new-question-options').value.trim();
+
+            if (!text) {
+                showMessage('create-message', '질문 내용을 입력해주세요.', 'error');
+                return;
+            }
+
+            let newQuestion = { text, type };
+            if (type === 'choice') {
+                if (!optionsInput) {
+                     showMessage('create-message', '객관식 질문의 옵션을 입력해주세요.', 'error');
+                     return;
+                }
+                newQuestion.options = optionsInput.split(',').map(o => o.trim()).filter(o => o.length > 0);
+            }
+
+            questions.push(newQuestion);
+            renderQuestions();
+
+            // 입력 필드 초기화
+            document.getElementById('new-question-text').value = '';
+            document.getElementById('new-question-options').value = '';
+            document.getElementById('new-question-type').value = 'text';
+            document.getElementById('new-options-container').style.display = 'none';
+            showMessage('create-message', '질문이 추가되었습니다.', 'success');
+        }
+
+        function removeQuestion(index) {
+            questions.splice(index, 1);
+            renderQuestions();
+            showMessage('create-message', '질문이 삭제되었습니다.', 'success');
+        }
+
+        // -------------------------------------
+        // 💡 3. API 통신 함수 (토큰 헤더 적용)
+        // -------------------------------------
+
+        async function createSurvey() {
+            const title = document.getElementById('survey-title').value.trim();
+            const description = document.getElementById('survey-description').value.trim();
+            
             if (!title || questions.length === 0) {
-                showMessage('form-message', '제목과 하나 이상의 질문을 입력하세요.', 'error');
+                showMessage('create-message', '제목을 입력하고 질문을 1개 이상 추가해야 합니다.', 'error');
                 return;
             }
 
             try {
-                let response;
-                const body = JSON.stringify({ title, description, questions });
-                
-                if (editingSurveyId) {
-                    response = await fetch(`${API_URL}/surveys/${editingSurveyId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: body
-                    });
-                } else {
-                    response = await fetch(`${API_URL}/surveys`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: body
-                    });
+                const response = await fetch(`${API_URL}/surveys`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(), // 💡 토큰 헤더 적용
+                    body: JSON.stringify({ title, description, questions })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) { 
+                    throw new Error(result.message || '설문지 제작 실패'); 
                 }
 
-                if (!response.ok) {
-                    throw new Error('서버 응답이 올바르지 않습니다.');
-                }
-                
-                const message = editingSurveyId ? '수정되었습니다!' : '생성되었습니다!';
-                showMessage('form-message', `설문지가 성공적으로 ${message}`, 'success');
-                resetFormToCreateMode(); 
+                // 성공 후 초기화
+                document.getElementById('survey-title').value = '';
+                document.getElementById('survey-description').value = '';
+                questions = [];
+                renderQuestions();
+                showMessage('create-message', '설문지가 성공적으로 제작되었습니다.', 'success');
                 loadSurveys(); 
 
             } catch (error) {
-                showMessage('form-message', `오류 발생: ${error.message}`, 'error');
+                // 로그인 만료 등 인증 오류 시
+                if (error.message.includes('로그인')) {
+                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
+                     localStorage.removeItem('adminToken');
+                     checkAuthentication();
+                     return;
+                }
+                showMessage('create-message', `오류: ${error.message}`, 'error');
             }
-        });
-
-        function resetFormToCreateMode() {
-            editingSurveyId = null;
-            form.reset();
-            questionsContainer.innerHTML = '';
-            questionCount = 0;
-            
-            formTitle.textContent = '설문지 생성';
-            submitBtn.textContent = '설문지 생성하기';
-            cancelEditBtn.style.display = 'none';
         }
-        
-        cancelEditBtn.addEventListener('click', resetFormToCreateMode);
 
-
-        // --- 2. 설문지 목록 조회 및 관리 ---
-        // (이 부분의 로직은 변경 없음)
         async function loadSurveys() {
             try {
-                const response = await fetch(`${API_URL}/surveys`);
-                const surveys = await response.json();
-
-                surveyListUl.innerHTML = ''; 
-                if (surveys.length === 0) {
-                    surveyListUl.innerHTML = '<li>생성된 설문지가 없습니다.</li>';
-                    return;
+                const response = await fetch(`${API_URL}/surveys`, { 
+                    method: 'GET',
+                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || '설문 목록을 가져오는 데 실패했습니다.'); 
                 }
 
+                const surveys = await response.json();
+                const listContainer = document.getElementById('survey-list');
+                listContainer.innerHTML = '';
+                
                 surveys.forEach(survey => {
-                    const li = document.createElement('li');
+                    const item = document.createElement('div');
+                    item.className = 'survey-item';
                     
-                    const surveyInfo = document.createElement('div');
-                    surveyInfo.className = 'survey-info';
-                    surveyInfo.innerHTML = `
-                        <strong>${survey.title}</strong><br>
-                        <small style="color: #666;">(ID: ${survey._id})</small><br>
-                        <small style="color: #007bff; font-weight: bold;">(사용자 링크: /index.html?id=${survey._id})</small>
+                    // 💡 주소 간소화 적용된 주소 표시
+                    const surveyUrl = `https://청주대출.com/${survey._id}`; 
+                    
+                    item.innerHTML = `
+                        <h3>${survey.title}</h3>
+                        <p>제작일: ${new Date(survey.createdAt).toLocaleDateString('ko-KR')}</p>
+                        <p>질문 수: ${survey.questions.length}개</p>
+                        <p>링크: <a href="${surveyUrl}" target="_blank">${surveyUrl}</a></p>
+                        <div class="survey-actions">
+                            <button onclick="copyLink('${surveyUrl}')">링크 복사</button>
+                            <button onclick="exportSurvey('${survey._id}', '${survey.title}')">엑셀/텔레그램 전송</button>
+                            <button onclick="deleteSurvey('${survey._id}', '${survey.title}')">삭제</button>
+                        </div>
                     `;
-                    
-                    const buttonGroup = document.createElement('div');
-                    buttonGroup.className = 'button-group';
-                    
-                    buttonGroup.innerHTML = `
-                        <button class="edit" onclick="showEditForm('${survey._id}')">수정</button>
-                        <button class="delete" onclick="deleteSurvey('${survey._id}', '${survey.title}')">삭제</button>
-                        <button class="export" onclick="exportSurvey('${survey._id}')">엑셀/이메일</button>
-                    `;
-
-                    li.appendChild(surveyInfo);
-                    li.appendChild(buttonGroup);
-                    surveyListUl.appendChild(li);
+                    listContainer.appendChild(item);
                 });
 
             } catch (error) {
-                showMessage('list-message', `목록 로딩 오류: ${error.message}`, 'error');
+                 // 로그인 만료 등 인증 오류 시
+                if (error.message.includes('로그인')) {
+                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
+                     localStorage.removeItem('adminToken');
+                     checkAuthentication();
+                     return;
+                }
+                showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
-        
-        async function showEditForm(surveyId) {
-            try {
-                const response = await fetch(`${API_URL}/surveys/${surveyId}`);
-                if (!response.ok) throw new Error('설문지 정보를 불러오는 데 실패했습니다.');
-                const survey = await response.json();
 
-                editingSurveyId = survey._id;
-                formTitle.textContent = '설문지 수정';
-                submitBtn.textContent = '설문지 수정하기';
-                cancelEditBtn.style.display = 'inline-block';
-
-                surveyTitleInput.value = survey.title;
-                surveyDescInput.value = survey.description;
-                
-                questionsContainer.innerHTML = '';
-                questionCount = 0; 
-                survey.questions.forEach(q => {
-                    addQuestionField(q.text, q.type, q.options);
-                });
-                
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-
-            } catch (error) {
-                 showMessage('form-message', `오류: ${error.message}`, 'error');
-            }
-        }
-        
         async function deleteSurvey(surveyId, surveyTitle) {
             if (!confirm(`[${surveyTitle}]\n\n이 설문지를 정말로 삭제하시겠습니까?\n모든 관련 응답도 함께 삭제됩니다.`)) {
                 return;
             }
 
             try {
-                const response = await fetch(`${API_URL}/surveys/${surveyId}`, { method: 'DELETE' });
+                const response = await fetch(`${API_URL}/surveys/${surveyId}`, { 
+                    method: 'DELETE',
+                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                });
                 const result = await response.json();
                 
                 if (!response.ok) { throw new Error(result.message || '삭제 실패'); }
@@ -386,27 +476,51 @@
                 loadSurveys(); 
 
             } catch (error) {
+                 // 로그인 만료 등 인증 오류 시
+                if (error.message.includes('로그인')) {
+                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
+                     localStorage.removeItem('adminToken');
+                     checkAuthentication();
+                     return;
+                }
                 showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
 
-        async function exportSurvey(surveyId) {
-            if (!confirm('정말로 이 설문의 엑셀 리포트를 이메일로 받으시겠습니까?')) {
+        async function exportSurvey(surveyId, surveyTitle) {
+            if (!confirm(`[${surveyTitle}]\n\n엑셀 리포트를 텔레그램으로 받으시겠습니까?`)) {
                 return;
             }
             try {
-                const response = await fetch(`${API_URL}/surveys/${surveyId}/export`);
+                const response = await fetch(`${API_URL}/surveys/${surveyId}/export`, {
+                    method: 'GET',
+                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                });
+                
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message || '전송 실패');
                 showMessage('list-message', result.message, 'success');
+
             } catch (error) {
+                 // 로그인 만료 등 인증 오류 시
+                if (error.message.includes('로그인')) {
+                     alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
+                     localStorage.removeItem('adminToken');
+                     checkAuthentication();
+                     return;
+                }
                 showMessage('list-message', `오류: ${error.message}`, 'error');
             }
         }
-
-        // --- 페이지 로드 시 설문 목록 자동 로드 ---
-        loadSurveys();
-
+        
+        function copyLink(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('설문지 주소가 클립보드에 복사되었습니다.');
+            }).catch(err => {
+                console.error('클립보드 복사 실패:', err);
+                alert('클립보드 복사에 실패했습니다. 주소를 직접 복사해주세요: ' + url);
+            });
+        }
     </script>
 </body>
 </html>

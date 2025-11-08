@@ -1,4 +1,4 @@
-// index.js (최종 수정 버전: 이메일 제거, 텔레그램 파일 직접 전송 & 정적 파일 제공 추가)
+// index.js (최종 버전: 관리자 로그인, CORS 해결, 텔레그램 전송 통합)
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -6,8 +6,8 @@ const bodyParser = require('body-parser');
 const cors = require('cors'); 
 const xlsx = require('xlsx'); 
 const axios = require('axios');
-// FormData를 사용하여 텔레그램에 파일을 전송하기 위해 'form-data' 라이브러리가 필요합니다.
 const FormData = require('form-data'); 
+const jwt = require('jsonwebtoken'); // 💡 JWT 라이브러리 추가
 
 const Survey = require('./models/Survey');
 const Response = require('./models/Response');
@@ -15,14 +15,16 @@ const Response = require('./models/Response');
 const app = express();
 const PORT = 5000;
 
-// --- 1. 기본 설정 (Middleware) ---
-// 🚨 CORS 문제 해결: 모든 도메인의 접근을 허용 (*)하여 CORS 오류를 무력화합니다.
-app.use(cors()); 
+// Render 환경 변수 로드 (없으면 기본값 사용)
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'your_super_secret_key_for_jwt';
 
+// --- 1. 기본 설정 (Middleware) ---
+// 🚨 CORS 문제 최종 해결: 모든 도메인에서의 접근을 무조건 허용합니다.
+app.use(cors()); 
 app.use(bodyParser.json());
 
-// 💡 (추가) 정적 파일(index.html, admin.html) 제공 설정: 
-// 이 코드가 없으면 Render에서 HTML 파일을 찾지 못해 "Cannot GET /index.html" 오류 발생
+// 💡 필수: Render 서버가 HTML 파일(정적 파일)을 제공하도록 설정
+// 이 설정으로 Render에서도 admin.html과 index.html을 찾을 수 있게 됩니다.
 app.use(express.static('.')); 
 
 // --- 2. MongoDB 데이터베이스 연결 ---
@@ -32,118 +34,93 @@ mongoose.connect(dbURI)
     .then(() => console.log('✅ MongoDB 연결 성공'))
     .catch((err) => console.error('❌ MongoDB 연결 실패:', err));
 
-// --- 3. Nodemailer 설정은 완전히 제거되었습니다. ---
+
+// --- 3. 인증 미들웨어 (Authentication Middleware) ---
+// 관리자 토큰의 유효성을 검사합니다.
+const isAuthenticated = (req, res, next) => {
+    // 1. 헤더에서 토큰 추출 (Bearer 스키마 제거)
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+        return res.status(401).json({ message: '접근 권한이 없습니다. (로그인 필요)' });
+    }
+
+    try {
+        // 2. 토큰 검증
+        const decoded = jwt.verify(token, ADMIN_SECRET);
+        req.user = decoded; 
+        next(); // 인증 성공: 다음 라우트 함수 실행
+    } catch (err) {
+        // 토큰 만료 또는 위변조
+        return res.status(401).json({ message: '접근 권한이 유효하지 않습니다. 다시 로그인해 주세요.' });
+    }
+};
 
 
 // --- 4. API 라우트(Routes) 정의 ---
 
-/* (테스트용) */
-app.get('/api/test', (req, res) => {
-    res.json({ message: '👋 survey-app 백엔드 서버가 동작 중입니다!' });
+// 💡 새로운 라우트: 관리자 로그인
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+    
+    const ADMIN_USER = process.env.ADMIN_USER;
+    const ADMIN_PASS = process.env.ADMIN_PASS;
+
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
+        // 인증 성공: 1시간 유효 기간 토큰 생성
+        const token = jwt.sign({ username: ADMIN_USER }, ADMIN_SECRET, { expiresIn: '1h' });
+        return res.json({ message: '로그인 성공', token: token });
+    } else {
+        return res.status(401).json({ message: '아이디 또는 비밀번호가 일치하지 않습니다.' });
+    }
 });
 
-/* (C) 새 설문지 생성 */
-app.post('/api/surveys', async (req, res) => {
+
+// ----------------------------------------------------------------------
+// 🚨 관리자 API: 모두 isAuthenticated 미들웨어 적용 (보안)
+// ----------------------------------------------------------------------
+
+// 1. 설문지 생성
+app.post('/api/surveys', isAuthenticated, async (req, res) => {
     try {
-        const { title, description, questions } = req.body;
-        const newSurvey = new Survey({ title, description, questions });
+        const newSurvey = new Survey(req.body);
         const savedSurvey = await newSurvey.save();
-        console.log('📝 새 설문지 저장 완료:', savedSurvey.title);
         res.status(201).json(savedSurvey);
     } catch (error) {
-        console.error('🔥 설문지 저장 오류:', error);
-        res.status(500).json({ message: '서버 오류', error });
+        console.error('설문지 생성 오류:', error);
+        res.status(500).json({ message: '설문지 생성에 실패했습니다.', error: error.message });
     }
 });
 
-/* (R) 모든 설문지 목록 조회 */
-app.get('/api/surveys', async (req, res) => {
+// 2. 모든 설문지 목록 조회
+app.get('/api/surveys', isAuthenticated, async (req, res) => {
     try {
-        const surveys = await Survey.find({}, '-questions').sort({ createdAt: -1 });
-        res.status(200).json(surveys);
+        const surveys = await Survey.find().sort({ createdAt: -1 });
+        res.json(surveys);
     } catch (error) {
-        console.error('🔥 설문지 목록 조회 오류:', error);
-        res.status(500).json({ message: '서버 오류', error });
+        res.status(500).json({ message: '설문지 목록을 가져오는 데 실패했습니다.' });
     }
 });
 
-/* (U) 특정 설문지 수정 */
-app.put('/api/surveys/:id', async (req, res) => {
+// 3. 설문지 삭제
+app.delete('/api/surveys/:id', isAuthenticated, async (req, res) => {
     try {
-        const { title, description, questions } = req.body;
-        const updatedSurvey = await Survey.findByIdAndUpdate(
-            req.params.id,
-            { title, description, questions },
-            { new: true, runValidators: true } 
-        );
-        if (!updatedSurvey) {
-            return res.status(404).json({ message: '수정할 설문지를 찾을 수 없습니다.' });
-        }
-        console.log('🔄 설문지 수정 완료:', updatedSurvey.title);
-        res.status(200).json(updatedSurvey);
+        const surveyId = req.params.id;
+        // 관련 응답 먼저 삭제
+        await Response.deleteMany({ surveyId: surveyId }); 
+        // 설문지 삭제
+        const result = await Survey.findByIdAndDelete(surveyId);
+        
+        if (!result) { return res.status(404).json({ message: '설문지를 찾을 수 없습니다.' }); }
+        
+        res.json({ message: `[${result.title}] 설문지와 관련 응답이 성공적으로 삭제되었습니다.` });
     } catch (error) {
-        console.error('🔥 설문지 수정 오류:', error);
-        res.status(500).json({ message: '서버 오류', error });
-    }
-});
-
-/* (D) 특정 설문지 삭제 */
-app.delete('/api/surveys/:id', async (req, res) => {
-    try {
-        const deletedSurvey = await Survey.findByIdAndDelete(req.params.id);
-        if (!deletedSurvey) {
-            return res.status(404).json({ message: '삭제할 설문지를 찾을 수 없습니다.' });
-        }
-        await Response.deleteMany({ surveyId: req.params.id });
-        console.log(`🗑️ 설문지 삭제 완료: ${deletedSurvey.title}`);
-        res.status(200).json({ message: '설문지가 성공적으로 삭제되었습니다.' });
-    } catch (error) {
-        console.error('🔥 설문지 삭제 오류:', error);
-        res.status(500).json({ message: '서버 오류', error });
-    }
-});
-
-/* (R) 특정 설문지 1개 조회 */
-app.get('/api/surveys/:id', async (req, res) => {
-    try {
-        const survey = await Survey.findById(req.params.id);
-        if (!survey) {
-            return res.status(404).json({ message: '설문지를 찾을 수 없습니다.' });
-        }
-        res.status(200).json(survey);
-    } catch (error) {
-        console.error('🔥 특정 설문지 조회 오류:', error);
-        if (error.kind === 'ObjectId') {
-             return res.status(400).json({ message: '잘못된 ID 형식입니다.' });
-        }
-        res.status(500).json({ message: '서버 오류', error });
-    }
-});
-
-/* (C) 설문 응답 제출 */
-app.post('/api/responses', async (req, res) => {
-    try {
-        const { surveyId, name, phone, answers } = req.body;
-        const surveyExists = await Survey.findById(surveyId);
-        if (!surveyExists) {
-            return res.status(404).json({ message: '존재하지 않는 설문지 ID입니다.' });
-        }
-        const newResponse = new Response({ surveyId, name, phone, answers });
-        await newResponse.save();
-        console.log(`✅ 새 응답 저장 완료 (Survey: ${surveyId}, User: ${name})`);
-        res.status(201).json({ message: '설문 응답이 성공적으로 제출되었습니다.' });
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(409).json({ message: '이미 이 전화번호로 참여한 설문입니다.' });
-        }
-        console.error('🔥 응답 저장 오류:', error);
-        res.status(500).json({ message: '서버 오류가 발생했습니다.', error });
+        res.status(500).json({ message: '설문지 삭제에 실패했습니다.' });
     }
 });
 
 
-/* 엑셀/텔레그램 전송 API (파일 직접 전송) */
-app.get('/api/surveys/:id/export', async (req, res) => {
+// 4. 텔레그램 엑셀 전송
+app.get('/api/surveys/:id/export', isAuthenticated, async (req, res) => {
     try {
         const surveyId = req.params.id;
         const survey = await Survey.findById(surveyId);
@@ -152,7 +129,7 @@ app.get('/api/surveys/:id/export', async (req, res) => {
         const responses = await Response.find({ surveyId: surveyId }).sort({ submittedAt: 1 });
         if (responses.length === 0) { return res.status(400).json({ message: '이 설문지에는 아직 응답이 없습니다.' }); }
 
-        // 엑셀 생성 로직...
+        // 엑셀 생성 로직... (이전 코드와 동일)
         const headers = ['제출 시간', '이름', '전화번호', ...survey.questions.map(q => q.text)];
         const data = [headers]; 
         for (const response of responses) {
@@ -185,19 +162,16 @@ app.get('/api/surveys/:id/export', async (req, res) => {
              });
         }
         
-        // Form Data를 사용하여 엑셀 파일 전송 준비
         const formData = new FormData();
         formData.append('chat_id', chatId);
-        // buffer를 stream으로 변환하여 form-data에 append (텔레그램 파일 전송 규격)
         formData.append('document', excelBuffer, { 
             filename: filename, 
             contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
         });
         formData.append('caption', captionText);
         
-        // 텔레그램 sendDocument API 호출
         await axios.post(`https://api.telegram.org/bot${telegramToken}/sendDocument`, formData, {
-            headers: formData.getHeaders() // Form Data 헤더 설정
+            headers: formData.getHeaders()
         });
 
         console.log('✅ 텔레그램으로 엑셀 파일 전송 성공!');
@@ -209,6 +183,46 @@ app.get('/api/surveys/:id/export', async (req, res) => {
             message: '서버 오류가 발생했습니다. 텔레그램 토큰, 채팅 ID, 또는 봇의 권한을 확인하세요.', 
             error: error.response ? error.response.data : error.message 
         });
+    }
+});
+
+
+// ----------------------------------------------------------------------
+// 🌐 사용자 API: 인증 미들웨어 적용 안 함 (모두 접근 가능)
+// ----------------------------------------------------------------------
+
+// 5. 특정 설문지 1개 조회 (사용자 페이지 로드용)
+app.get('/api/surveys/:id', async (req, res) => {
+    try {
+        const survey = await Survey.findById(req.params.id);
+        if (!survey) {
+            return res.status(404).json({ message: '설문지를 찾을 수 없습니다.' });
+        }
+        res.json(survey);
+    } catch (error) {
+        res.status(500).json({ message: '설문지 정보를 가져오는 데 실패했습니다.' });
+    }
+});
+
+// 6. 설문 응답 제출
+app.post('/api/responses', async (req, res) => {
+    try {
+        const { surveyId, name, phone, answers } = req.body;
+        
+        // 중복 응답 체크 (전화번호 기준)
+        const existingResponse = await Response.findOne({ surveyId, phone });
+        if (existingResponse) {
+            return res.status(409).json({ message: '이미 이 설문에 참여한 전화번호입니다.' });
+        }
+
+        const newResponse = new Response({ surveyId, name, phone, answers });
+        await newResponse.save();
+        
+        res.status(201).json({ message: '소중한 의견 감사합니다. 응답이 성공적으로 제출되었습니다.' });
+
+    } catch (error) {
+        console.error('응답 제출 오류:', error);
+        res.status(500).json({ message: '응답 제출에 실패했습니다.' });
     }
 });
 

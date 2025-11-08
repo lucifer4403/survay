@@ -1,0 +1,5 @@
+# 관리자 페이지 주소: https://도메인/admin 으로 접속 가능
+/admin /admin.html 200
+
+# 설문지 주소: https://도메인/123456... 으로 접속 가능
+/:surveyId /index.html?id=:surveyId 200
