@@ -141,21 +141,39 @@
         let originalQuestions = []; 
 
         window.addEventListener('load', async () => {
-            // 🚨 수정된 로직: URL 경로에서 ID 추출
-            const pathParts = window.location.pathname.split('/').filter(p => p.length > 0);
             
-            // 1. /index.html?id=... 형태일 경우 (기존 방식)
+            // 🚨 최종 수정된 ID 추출 로직 (주소 간소화 및 최신 설문지 로드)
+            const pathParts = window.location.pathname.split('/').filter(p => p.length > 0);
             const params = new URLSearchParams(window.location.search);
+            
+            // 1. /index.html?id=... 형태일 경우 (백엔드 리다이렉트가 보내는 최종 형태)
             if (params.has('id')) {
                  surveyId = params.get('id');
             } 
-            // 2. /설문지ID 형태일 경우 (주소 간소화 적용 시)
-            else if (pathParts.length > 0) {
-                 // 경로의 마지막 부분이 24자리 ObjectId 형식인지 확인하여 ID로 사용
+            // 2. /설문지ID 형태일 경우 (유저가 직접 /ID로 접근했을 때)
+            else if (pathParts.length > 0 && pathParts[pathParts.length - 1] !== 'index.html') {
                  const lastPart = pathParts[pathParts.length - 1];
-                 // 24자리 16진수인지 대략적으로 확인
                  if (lastPart.length === 24 && /^[0-9a-fA-F]+$/.test(lastPart)) {
                     surveyId = lastPart;
+                 }
+            }
+            // 3. / (도메인 최상위)로 접속했을 때 (최신 설문지 ID를 API에서 가져옴)
+            else if (window.location.pathname === '/' || window.location.pathname === '/index.html') {
+                 try {
+                     const latestResponse = await fetch(`${API_URL}/latest-survey`); 
+                     const latestResult = await latestResponse.json();
+                     
+                     if (latestResult.surveyId) {
+                         surveyId = latestResult.surveyId; 
+                         // 주소창을 /ID 형태로 변경 (깔끔한 주소 유지)
+                         history.replaceState(null, '', `/${surveyId}`); 
+                     } else {
+                          showError('현재 생성된 설문지가 없습니다.');
+                          return;
+                     }
+                 } catch (error) {
+                     showError(`최신 설문지 로딩 오류: ${error.message}`);
+                     return;
                  }
             }
 
@@ -183,7 +201,7 @@
             }
         });
 
-        // --- 2. 불러온 질문들로 HTML 그리기 (드롭다운 복원) ---
+        // --- 2. 불러온 질문들로 HTML 그리기 (드롭다운 포함) ---
         function renderQuestions(questions) {
             questionsWrapper.innerHTML = ''; 
             
@@ -208,8 +226,7 @@
                         `).join('');
                         break;
                         
-                    // 💡 드롭다운 타입 렌더링 복원
-                    case 'dropdown':
+                    case 'dropdown': // 💡 드롭다운 렌더링
                         content += `<select id="${questionName}" name="${questionName}" class="question-input" required>`;
                         content += `<option value="" disabled selected>선택해주세요</option>`; 
                         content += q.options.map(opt => `
@@ -217,7 +234,6 @@
                         `).join('');
                         content += `</select>`;
                         break;
-                    // ---------------------------------------------
 
                     case 'rating': 
                         content += '<div style="display: flex; justify-content: space-around; padding: 0 10px;">';
@@ -237,7 +253,7 @@
             });
         }
 
-        // --- 3. "제출하기" 버튼 클릭 시 ---
+        // --- 3. "제출하기" 버튼 클릭 시 (로직은 동일) ---
         surveyForm.addEventListener('submit', async (e) => {
             e.preventDefault(); 
             

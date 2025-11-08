@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>설문조사 관리자 페이지</title>
     <style>
-        /* ------------------------------------- */
-        /* CSS 영역 */
-        /* ------------------------------------- */
+        /* CSS는 이전과 동일 */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
@@ -117,10 +115,10 @@
             padding-top: 10px;
         }
 
-        /* 💡 로그인 관련 CSS */
+        /* 로그인 관련 CSS */
         #admin-content {
-            display: none; /* 로그인 전까지 숨김 */
-            width: 100%; /* container 대신 전체 너비를 차지하도록 설정 */
+            display: none; 
+            width: 100%; 
         }
         #login-container {
             max-width: 400px;
@@ -188,7 +186,8 @@
                 <select id="new-question-type">
                     <option value="text">단답형</option>
                     <option value="choice">객관식 (라디오 버튼)</option>
-                    <option value="dropdown">드롭다운</option> <option value="rating">별점 (1-5)</option>
+                    <option value="dropdown">드롭다운</option> 
+                    <option value="rating">별점 (1-5)</option>
                 </select>
 
                 <div id="new-options-container" style="display: none; margin-top: 10px;">
@@ -210,7 +209,6 @@
     </div>
 
     <script>
-        // 🚨 API_URL은 Render 서버 주소로 고정합니다.
         const API_URL = 'https://survay.onrender.com/api'; 
         const LOGIN_API_URL = `${API_URL}/login`;
 
@@ -218,35 +216,31 @@
         // 💡 1. 인증 관련 함수
         // -------------------------------------
 
-        // 로컬 스토리지에서 토큰을 가져와 헤더를 생성합니다.
         function getAuthHeaders() {
             const token = localStorage.getItem('adminToken');
             return {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // 💡 JWT 토큰 첨부
+                'Authorization': `Bearer ${token}` 
             };
         }
 
-        // 로그인 폼, 관리자 콘텐츠 DOM 요소
         const loginContainer = document.getElementById('login-container');
         const adminContent = document.getElementById('admin-content');
         const loginForm = document.getElementById('login-form');
         const loginMessage = document.getElementById('login-message');
 
-        // 인증 상태 확인 및 UI 전환
         function checkAuthentication() {
             const token = localStorage.getItem('adminToken');
             if (token) {
                 loginContainer.style.display = 'none';
                 adminContent.style.display = 'flex';
-                loadSurveys(); // 로그인 성공 시 설문 목록 로드
+                loadSurveys();
             } else {
                 loginContainer.style.display = 'block';
                 adminContent.style.display = 'none';
             }
         }
 
-        // 로그인 이벤트 리스너
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value;
@@ -266,7 +260,6 @@
                     return;
                 }
                 
-                // 로그인 성공: 토큰 저장 후 페이지 로드
                 localStorage.setItem('adminToken', result.token);
                 showMessage('login-message', result.message, 'success');
                 checkAuthentication();
@@ -276,7 +269,6 @@
             }
         });
 
-        // 로그아웃 버튼 이벤트 리스너
         document.addEventListener('DOMContentLoaded', () => {
              const logoutBtn = document.getElementById('logout-btn');
              if (logoutBtn) {
@@ -286,7 +278,6 @@
                      checkAuthentication();
                  });
              }
-             // 페이지 로드 시 인증 확인
              checkAuthentication(); 
         });
 
@@ -308,7 +299,6 @@
         document.getElementById('new-question-type').addEventListener('change', (e) => {
             const type = e.target.value;
             const optionsContainer = document.getElementById('new-options-container');
-            // 'choice' 또는 'dropdown'일 때만 옵션 입력 필드를 보여줌
             if (type === 'choice' || type === 'dropdown') {
                 optionsContainer.style.display = 'block';
             } else {
@@ -326,20 +316,10 @@
                 let typeText = '';
 
                 switch(q.type) {
-                    case 'text':
-                        typeText = '단답형';
-                        break;
-                    case 'choice':
-                        typeText = '객관식 (라디오)';
-                        optionsText = `<br>옵션: ${q.options.join(', ')}`;
-                        break;
-                    case 'dropdown': // 💡 드롭다운 출력
-                        typeText = '드롭다운';
-                        optionsText = `<br>옵션: ${q.options.join(', ')}`;
-                        break;
-                    case 'rating':
-                        typeText = '별점 (1-5)';
-                        break;
+                    case 'text': typeText = '단답형'; break;
+                    case 'choice': typeText = '객관식 (라디오)'; optionsText = `<br>옵션: ${q.options.join(', ')}`; break;
+                    case 'dropdown': typeText = '드롭다운'; optionsText = `<br>옵션: ${q.options.join(', ')}`; break;
+                    case 'rating': typeText = '별점 (1-5)'; break;
                 }
 
                 div.innerHTML = `
@@ -361,7 +341,7 @@
             }
 
             let newQuestion = { text, type };
-            if (type === 'choice' || type === 'dropdown') { // 💡 드롭다운 옵션 체크
+            if (type === 'choice' || type === 'dropdown') {
                 if (!optionsInput) {
                      showMessage('create-message', `${type === 'dropdown' ? '드롭다운' : '객관식'} 질문의 옵션을 입력해주세요.`, 'error');
                      return;
@@ -376,7 +356,6 @@
             questions.push(newQuestion);
             renderQuestions();
 
-            // 입력 필드 초기화
             document.getElementById('new-question-text').value = '';
             document.getElementById('new-question-options').value = '';
             document.getElementById('new-question-type').value = 'text';
@@ -406,7 +385,7 @@
             try {
                 const response = await fetch(`${API_URL}/surveys`, {
                     method: 'POST',
-                    headers: getAuthHeaders(), // 💡 토큰 헤더 적용
+                    headers: getAuthHeaders(),
                     body: JSON.stringify({ title, description, questions })
                 });
 
@@ -425,7 +404,6 @@
                 loadSurveys(); 
 
             } catch (error) {
-                // 로그인 만료 등 인증 오류 시
                 if (error.message.includes('로그인')) {
                      alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
                      localStorage.removeItem('adminToken');
@@ -440,7 +418,7 @@
             try {
                 const response = await fetch(`${API_URL}/surveys`, { 
                     method: 'GET',
-                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                    headers: getAuthHeaders() 
                 });
                 
                 if (!response.ok) {
@@ -458,6 +436,7 @@
                     
                     // 🚨 주소 간소화 적용된 주소 표시
                     const domain = window.location.origin;
+                    // 주소는 도메인/ID 형태로 깔끔하게 표시됩니다.
                     const surveyUrl = `${domain}/${survey._id}`; 
                     
                     item.innerHTML = `
@@ -475,7 +454,6 @@
                 });
 
             } catch (error) {
-                 // 로그인 만료 등 인증 오류 시
                 if (error.message.includes('로그인')) {
                      alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
                      localStorage.removeItem('adminToken');
@@ -494,7 +472,7 @@
             try {
                 const response = await fetch(`${API_URL}/surveys/${surveyId}`, { 
                     method: 'DELETE',
-                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                    headers: getAuthHeaders() 
                 });
                 const result = await response.json();
                 
@@ -504,7 +482,6 @@
                 loadSurveys(); 
 
             } catch (error) {
-                 // 로그인 만료 등 인증 오류 시
                 if (error.message.includes('로그인')) {
                      alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
                      localStorage.removeItem('adminToken');
@@ -522,7 +499,7 @@
             try {
                 const response = await fetch(`${API_URL}/surveys/${surveyId}/export`, {
                     method: 'GET',
-                    headers: getAuthHeaders() // 💡 토큰 헤더 적용
+                    headers: getAuthHeaders() 
                 });
                 
                 const result = await response.json();
@@ -530,7 +507,6 @@
                 showMessage('list-message', result.message, 'success');
 
             } catch (error) {
-                 // 로그인 만료 등 인증 오류 시
                 if (error.message.includes('로그인')) {
                      alert('인증이 만료되었습니다. 다시 로그인해 주세요.');
                      localStorage.removeItem('adminToken');
