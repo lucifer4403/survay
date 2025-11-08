@@ -370,7 +370,7 @@
         }
 
         // -------------------------------------
-        // 💡 3. API 통신 함수 (토큰 헤더 및 주소 간소화 적용)
+        // 💡 3. API 통신 함수
         // -------------------------------------
 
         async function createSurvey() {
@@ -395,7 +395,6 @@
                     throw new Error(result.message || '설문지 제작 실패'); 
                 }
 
-                // 성공 후 초기화
                 document.getElementById('survey-title').value = '';
                 document.getElementById('survey-description').value = '';
                 questions = [];
@@ -434,9 +433,7 @@
                     const item = document.createElement('div');
                     item.className = 'survey-item';
                     
-                    // 🚨 주소 간소화 적용된 주소 표시
                     const domain = window.location.origin;
-                    // 주소는 도메인/ID 형태로 깔끔하게 표시됩니다.
                     const surveyUrl = `${domain}/${survey._id}`; 
                     
                     item.innerHTML = `
