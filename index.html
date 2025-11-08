@@ -43,7 +43,6 @@
             font-weight: 600;
             margin-bottom: 15px;
         }
-        /* --- 3단계: select 태그 스타일 추가 --- */
         input[type="text"], input[type="tel"], select { 
             width: 95%;
             padding: 12px;
@@ -51,7 +50,6 @@
             border-radius: 6px;
             font-size: 16px;
         }
-        /* ------------------------------------ */
         .personal-info {
             background: #f9f9f9;
             border: 1px solid #eee;
@@ -143,11 +141,27 @@
         let originalQuestions = []; 
 
         window.addEventListener('load', async () => {
+            // 🚨 수정된 로직: URL 경로에서 ID 추출
+            const pathParts = window.location.pathname.split('/').filter(p => p.length > 0);
+            
+            // 1. /index.html?id=... 형태일 경우 (기존 방식)
             const params = new URLSearchParams(window.location.search);
-            surveyId = params.get('id');
+            if (params.has('id')) {
+                 surveyId = params.get('id');
+            } 
+            // 2. /설문지ID 형태일 경우 (주소 간소화 적용 시)
+            else if (pathParts.length > 0) {
+                 // 경로의 마지막 부분이 24자리 ObjectId 형식인지 확인하여 ID로 사용
+                 const lastPart = pathParts[pathParts.length - 1];
+                 // 24자리 16진수인지 대략적으로 확인
+                 if (lastPart.length === 24 && /^[0-9a-fA-F]+$/.test(lastPart)) {
+                    surveyId = lastPart;
+                 }
+            }
+
 
             if (!surveyId) {
-                showError('잘못된 접근입니다. 설문지 ID가 없습니다.');
+                showError('잘못된 접근입니다. 설문지 ID가 URL에 없습니다.');
                 return;
             }
 
@@ -165,11 +179,11 @@
                 renderQuestions(survey.questions);
 
             } catch (error) {
-                showError(error.message);
+                showError(`설문지 로딩 오류: ${error.message}`);
             }
         });
 
-        // --- 2. 불러온 질문들로 HTML 그리기 (수정됨) ---
+        // --- 2. 불러온 질문들로 HTML 그리기 (드롭다운 복원) ---
         function renderQuestions(questions) {
             questionsWrapper.innerHTML = ''; 
             
@@ -194,10 +208,10 @@
                         `).join('');
                         break;
                         
-                    // --- 3단계: 'dropdown' 타입 렌더링 로직 추가 ---
+                    // 💡 드롭다운 타입 렌더링 복원
                     case 'dropdown':
                         content += `<select id="${questionName}" name="${questionName}" class="question-input" required>`;
-                        content += `<option value="" disabled selected>선택해주세요</option>`; // 기본값
+                        content += `<option value="" disabled selected>선택해주세요</option>`; 
                         content += q.options.map(opt => `
                             <option value="${opt}">${opt}</option>
                         `).join('');
@@ -223,7 +237,7 @@
             });
         }
 
-        // --- 3. "제출하기" 버튼 클릭 시 (로직 변경 없음) ---
+        // --- 3. "제출하기" 버튼 클릭 시 ---
         surveyForm.addEventListener('submit', async (e) => {
             e.preventDefault(); 
             
@@ -243,7 +257,7 @@
                 const q = originalQuestions[i];
                 const value = formData.get(`q_${i}`); 
 
-                if (!value || (q.type === 'dropdown' && value === '')) { // 드롭다운 기본값('선택해주세요') 체크 추가
+                if (!value || (q.type === 'dropdown' && value === '')) { 
                     allAnswered = false; 
                     break;
                 }

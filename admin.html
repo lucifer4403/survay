@@ -6,7 +6,7 @@
     <title>설문조사 관리자 페이지</title>
     <style>
         /* ------------------------------------- */
-        /* CSS는 이전과 동일하며, 로그인 관련 CSS만 추가되었습니다. */
+        /* CSS 영역 */
         /* ------------------------------------- */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -187,7 +187,8 @@
                 <label for="new-question-type">유형:</label>
                 <select id="new-question-type">
                     <option value="text">단답형</option>
-                    <option value="choice">객관식 (다중 선택)</option>
+                    <option value="choice">객관식 (라디오 버튼)</option>
+                    <option value="dropdown">드롭다운</option> <option value="rating">별점 (1-5)</option>
                 </select>
 
                 <div id="new-options-container" style="display: none; margin-top: 10px;">
@@ -305,8 +306,14 @@
         }
 
         document.getElementById('new-question-type').addEventListener('change', (e) => {
+            const type = e.target.value;
             const optionsContainer = document.getElementById('new-options-container');
-            optionsContainer.style.display = e.target.value === 'choice' ? 'block' : 'none';
+            // 'choice' 또는 'dropdown'일 때만 옵션 입력 필드를 보여줌
+            if (type === 'choice' || type === 'dropdown') {
+                optionsContainer.style.display = 'block';
+            } else {
+                optionsContainer.style.display = 'none';
+            }
         });
 
         function renderQuestions() {
@@ -316,11 +323,27 @@
                 const div = document.createElement('div');
                 div.className = 'question-item';
                 let optionsText = '';
-                if (q.type === 'choice' && q.options) {
-                    optionsText = `<br>옵션: ${q.options.join(', ')}`;
+                let typeText = '';
+
+                switch(q.type) {
+                    case 'text':
+                        typeText = '단답형';
+                        break;
+                    case 'choice':
+                        typeText = '객관식 (라디오)';
+                        optionsText = `<br>옵션: ${q.options.join(', ')}`;
+                        break;
+                    case 'dropdown': // 💡 드롭다운 출력
+                        typeText = '드롭다운';
+                        optionsText = `<br>옵션: ${q.options.join(', ')}`;
+                        break;
+                    case 'rating':
+                        typeText = '별점 (1-5)';
+                        break;
                 }
+
                 div.innerHTML = `
-                    <p><strong>${index + 1}. ${q.text}</strong> (${q.type === 'text' ? '단답형' : '객관식'})${optionsText}</p>
+                    <p><strong>${index + 1}. ${q.text}</strong> (${typeText})${optionsText}</p>
                     <button onclick="removeQuestion(${index})">삭제</button>
                 `;
                 list.appendChild(div);
@@ -338,12 +361,16 @@
             }
 
             let newQuestion = { text, type };
-            if (type === 'choice') {
+            if (type === 'choice' || type === 'dropdown') { // 💡 드롭다운 옵션 체크
                 if (!optionsInput) {
-                     showMessage('create-message', '객관식 질문의 옵션을 입력해주세요.', 'error');
+                     showMessage('create-message', `${type === 'dropdown' ? '드롭다운' : '객관식'} 질문의 옵션을 입력해주세요.`, 'error');
                      return;
                 }
                 newQuestion.options = optionsInput.split(',').map(o => o.trim()).filter(o => o.length > 0);
+                if (newQuestion.options.length === 0) {
+                    showMessage('create-message', '옵션을 콤마로 구분하여 입력해주세요.', 'error');
+                    return;
+                }
             }
 
             questions.push(newQuestion);
@@ -364,7 +391,7 @@
         }
 
         // -------------------------------------
-        // 💡 3. API 통신 함수 (토큰 헤더 적용)
+        // 💡 3. API 통신 함수 (토큰 헤더 및 주소 간소화 적용)
         // -------------------------------------
 
         async function createSurvey() {
@@ -429,8 +456,9 @@
                     const item = document.createElement('div');
                     item.className = 'survey-item';
                     
-                    // 💡 주소 간소화 적용된 주소 표시
-                    const surveyUrl = `https://청주대출.com/${survey._id}`; 
+                    // 🚨 주소 간소화 적용된 주소 표시
+                    const domain = window.location.origin;
+                    const surveyUrl = `${domain}/${survey._id}`; 
                     
                     item.innerHTML = `
                         <h3>${survey.title}</h3>
